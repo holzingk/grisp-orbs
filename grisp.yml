@@ -1,0 +1,107 @@
+version: 2.1
+description: This orb is a collection of commands to setup Erlang and Rebar3 for use with GRiSP.
+
+commands:
+  install-erlang:
+    description: Build and install Erlang with asdf from source
+    parameters:
+      version:
+        type: string
+        description: Erlang version to build (must be available in asdf)
+        default: "21.0"
+    steps:
+      - run: 'zypper install -y --type pattern devel_basis devel_C_C++'
+      - run: 'zypper install -y git tar gzip wget curl libopenssl-devel openssl'
+      - run: 'git clone https://github.com/asdf-vm/asdf.git ~/.asdf'
+      - run:
+          command: 'git checkout "$(git describe --abbrev=0 --tags)"'
+          working_directory: ~/.asdf
+      - run: "echo -e '\n. $HOME/.asdf/asdf.sh' >> ~/.bashrc && \
+        echo -e '\n. $HOME/.asdf/completions/asdf.bash' >> ~/.bashrc"
+      - run: 'source ~/.bashrc &&
+        asdf plugin-add erlang &&
+        asdf install erlang << parameters.version >> &&
+        asdf global erlang << parameters.version >>'
+  install-rebar3:
+    description: Download and install rebar3 and configure the grisp plugin
+    parameters:
+      rebar3-grisp-revision:
+        type: string
+        description: Revision of rebar3-plugin to use, if not set use latest version from hex.pm
+        default: \"\"
+    steps:
+      - run:
+          command: wget https://s3.amazonaws.com/rebar3/rebar3
+          working_directory: /root/bin
+      - run: chmod +x /root/bin/rebar3
+      - run: echo 'export PATH=$HOME/bin/:$PATH' >> ~/.bashrc
+      - run: mkdir -p ~/.config/rebar3
+      - when:
+          condition: << parameters.rebar3-grisp-revision >>
+          steps:
+            - run: "echo '{plugins, [rebar3_hex, {rebar3_grisp, {git, \"https://github.com/grisp/rebar3_grisp.git\", {ref, \"<< parameters.rebar3-grisp-revision >>\"}}}]}.' >> ~/.config/rebar3/rebar.config"
+      - unless:
+          condition: << parameters.rebar3-grisp-revision >>
+          steps:
+            - run: "echo '{plugins, [rebar3_hex, rebar3_grisp]}.' >> ~/.config/rebar3/rebar.config"
+  install-toolchain:
+    description: Downloads and installs a prebuilt toolchain binary.
+    parameters:
+      toolchain-revision:
+        type: string
+        description: Toolchain revision to use, if not set use latest master
+        default: \"\"
+    steps:
+      - when:
+          condition: << parameters.toolchain-revision >>
+          steps:
+            - run: echo 'export GRISP_TOOLCHAIN_REVISION="<< parameters.toolchain-revision >>"' >> $BASH_ENV
+      - unless:
+          condition: << parameters.toolchain-revision >>
+          steps:
+            - run:
+                run: echo 'export GRISP_TOOLCHAIN_REVISION=$(git ls-remote -h https://github.com/nextl00p/grisp-software master | awk \'{print $1}\')' >> $BASH_ENV
+      - run:
+          name: Download toolchain
+          command: "wget https://s3.amazonaws.com/grisp/platforms/grisp_base/toolchain/grisp_toolchain_arm-rtems5_Linux_$GRISP_TOOLCHAIN_REVISION.tar.gz"
+          working_directory: /tmp
+      - run: mkdir -p $TOOLCHAIN_PATH
+      - run: "cd $TOOLCHAIN_PATH && tar -xzf /tmp/grisp_toolchain*"
+  create-grisp-project:
+    description: Creates a new grisp project template
+    parameters:
+      build-otp:
+        type: boolean
+        description: If set adds a build section pointing to the provided toolchain path
+        default: false
+      grisp-revision:
+        type: string
+        description: Revision of grisp to use, defaults to hex.pm
+        default: \"\"
+    steps:
+      - run: mkdir /tmp/destination
+      - run:
+          command: "source ~/.bashrc &&
+          rebar3 new grispapp ciproject dest=/tmp/destination"
+          working_directory: /root
+      - when:
+          condition: << parameters.grisp-revision >>
+          steps:
+            - run:
+                name: Change grisp dependency to specified revision
+                command: "sed -i 's/{deps, [grisp]}./{deps, [{grisp, {git, \"https://github.com/grisp/grisp.git\", {ref, \"<< parameters.grisp-revision >>\"}}}]}./' rebar3.config"
+                working_directory: /root/ciproject
+      - when:
+          condition: << parameters.build-otp >>
+          steps:
+            - run:
+                name: Add build section to rebar.config of our project
+                command: "source ~/.bashrc &&
+                TC_PATH=/opt/grisp/grisp-base/*/rtems-install/rtems/5 &&
+                erl -noshell -eval '{ok, Config} = file:consult(\"rebar.config\"),
+                {value, {grisp, GrispConfig}} = lists:keysearch(grisp, 1, Config),
+                NewGrispConfig = GrispConfig ++ [{build, [{toolchain, [{directory, \"'${TC_PATH}'\"}]}]}],
+                NewConfig = lists:keyreplace(grisp, 1, Config, {grisp, NewGrispConfig}),
+                file:write_file(\"rebar.config\", lists:map(fun (E) -> io_lib:format(\"~p.~n\", [E]) end, NewConfig)).' -s init stop"
+                working_directory: /root/ciproject
+

@@ -78,11 +78,14 @@ commands:
         type: string
         description: Revision of grisp to use, defaults to hex.pm
         default: \"\"
+      deploy-destination:
+        type: string
+        description: Destination where the project should be deployed
     steps:
-      - run: mkdir /tmp/destination
+      - run: mkdir -p << parameters.deploy-destination >>
       - run:
           command: "source ~/.bashrc &&
-          rebar3 new grispapp ciproject dest=/tmp/destination"
+          rebar3 new grispapp ciproject dest=<< parameters.deploy-destination >>"
           working_directory: /root
       - when:
           condition: << parameters.grisp-revision >>

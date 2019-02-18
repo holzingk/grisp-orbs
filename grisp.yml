@@ -12,16 +12,24 @@ commands:
     steps:
       - run: 'zypper install -y --type pattern devel_basis devel_C_C++'
       - run: 'zypper install -y git tar gzip wget curl libopenssl-devel openssl'
-      - run: 'git clone https://github.com/asdf-vm/asdf.git ~/.asdf'
+      - run: "echo -e '\n. $HOME/.asdf/asdf.sh' >> ~/.bashrc && \
+        echo -e '\n. $HOME/.asdf/completions/asdf.bash' >> ~/.bashrc"
+      - restore_cache:
+          keys:
+            - v0.1-asdf-otp
+      - run: 'if cd ~/.asdf; then git pull origin master; else git clone https://github.com/asdf-vm/asdf.git ~/.asdf; fi'
       - run:
           command: 'git checkout "$(git describe --abbrev=0 --tags)"'
           working_directory: ~/.asdf
-      - run: "echo -e '\n. $HOME/.asdf/asdf.sh' >> ~/.bashrc && \
-        echo -e '\n. $HOME/.asdf/completions/asdf.bash' >> ~/.bashrc"
       - run: 'source ~/.bashrc &&
-        asdf plugin-add erlang &&
-        asdf install erlang << parameters.version >> &&
-        asdf global erlang << parameters.version >>'
+        if [ $(asdf plugin-list | grep -c "erlang") -eq 0]; then asdf plugin-add erlang &&
+        asdf install erlang << parameters.version >>; fi'
+      - run: 'source ~/.bashrc && asdf global erlang << parameters.version >>'
+      - save_cache:
+          paths:
+             - /root/.asdf
+          key: v0.1-asdf-otp
+
   install-rebar3:
     description: Download and install rebar3 and configure the grisp plugin
     parameters:
@@ -73,6 +81,10 @@ commands:
         type: boolean
         description: If set adds a build section pointing to the provided toolchain path
         default: false
+      grisp-repo:
+        type: string
+        description: Grisp repo url to use when grisp-revision is set
+        default: "https://github.com/grisp/grisp.git"
       grisp-revision:
         type: string
         description: Revision of grisp to use, defaults to hex.pm
@@ -91,7 +103,7 @@ commands:
           steps:
             - run:
                 name: Change grisp dependency to specified revision
-                command: "sed -i 's/{deps, [grisp]}./{deps, [{grisp, {git, \"https://github.com/grisp/grisp.git\", {ref, \"<< parameters.grisp-revision >>\"}}}]}./' rebar3.config"
+                command: REPO=$(echo "<<parameters.grisp-repo>>" | sed s#git@github.com:#https://github.com/#) && sed -i "s#^{deps.*#{deps, [{grisp, {git, \"${REPO}\", {ref, \"<< parameters.grisp-revision >>\"}}}]}.#" rebar.config
                 working_directory: /root/ciproject
       - when:
           condition: <<parameters.build-otp>>

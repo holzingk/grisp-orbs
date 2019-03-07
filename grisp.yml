@@ -68,7 +68,7 @@ commands:
           condition: <<parameters.toolchain-revision>>
           steps:
             - run:
-                command: echo "export GRISP_TOOLCHAIN_REVISION=$(git ls-remote -h https://github.com/nextl00p/grisp-software master | awk '{print $1}')" >> $BASH_ENV
+                command: echo "export GRISP_TOOLCHAIN_REVISION=$(git ls-remote -h https://github.com/grisp/grisp-software master | awk '{print $1}')" >> $BASH_ENV
       - run:
           name: Download toolchain
           command: "wget https://s3.amazonaws.com/grisp/platforms/grisp_base/toolchain/grisp_toolchain_arm-rtems5_Linux_${GRISP_TOOLCHAIN_REVISION}.tar.gz"

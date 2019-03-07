@@ -22,7 +22,7 @@ commands:
           command: 'git checkout "$(git describe --abbrev=0 --tags)"'
           working_directory: ~/.asdf
       - run: 'source ~/.bashrc &&
-        if [ $(asdf plugin-list | grep -c "erlang") -eq 0]; then asdf plugin-add erlang &&
+        if [ $(asdf plugin-list | grep -c "erlang") -eq 0 ]; then asdf plugin-add erlang &&
         asdf install erlang << parameters.version >>; fi'
       - run: 'source ~/.bashrc && asdf global erlang << parameters.version >>'
       - save_cache:

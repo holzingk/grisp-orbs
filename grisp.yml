@@ -96,7 +96,7 @@ commands:
       - run: mkdir -p << parameters.deploy-destination >>
       - run:
           command: "source ~/.bashrc &&
-          rebar3 new grispapp ciproject dest=<< sparameters.deploy-destination >>"
+          rebar3 new grispapp ciproject dest=<< parameters.deploy-destination >>"
           working_directory: /root
       - when:
           condition: <<parameters.grisp-revision>>
